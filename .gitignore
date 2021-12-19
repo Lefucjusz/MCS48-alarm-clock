@@ -1,0 +1,9 @@
+# Ignore everything...
+/*
+
+#...except for
+!.gitignore
+!README.md
+!LICENSE.md
+!alarm.asm
+!rom.bin
