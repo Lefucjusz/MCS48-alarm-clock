@@ -124,12 +124,10 @@ lcd_cls:
 	mov R1,#0 ;Send commands
 	mov R0,#$01	
 	call lcd_write ;Clear display
-	mov R6,#1
-	call delay_ms ;Wait 1ms
+	mov R6,#2
+	call delay_ms ;Wait 2ms (at least 1.52ms required, HD44780 datasheet, Table 6, p. 24)
 	mov R0,#$80
 	call lcd_write ;Set cursor at first place in upper row
-	mov R6,#1
-	call delay_ms ;Wait 1ms
 	ret
 
 ;R1 - row, R0 - column, uses and corrupts R0,R1	
@@ -181,29 +179,29 @@ lcd_load_glyph:
     mov R1,#1 ;Since now only characters will be sent to display
     mov R2,#bell_glyph ;Load bell_glyph array address to R2
     mov R7,#8 ;Load loop counter
-lcd_load_glyphs_loop:
+lcd_load_glyph_loop:
     mov A,R2
     movp A,@A ;Load glyph byte from ROM to A
     .ct
     mov R0,A ;Load glyph byte to R0
     call lcd_write ;Write character to LCD
     inc R2 ;Move pointer to next bell_glyph byte
-    djnz R7,lcd_load_glyphs_loop ;Repeat for every byte from glyph
+    djnz R7,lcd_load_glyph_loop ;Repeat for every byte from glyph
     call lcd_cls ;Clear display and move pointer to first row, first column
     ret
 	
 ;Uses and corrupts R0,R1,R6,R7	
 lcd_init:
 	mov R1,#0 ;Whole subroutine will be sending commands
-    mov R0,#$30	
+    mov R0,#$03
 	call lcd_write ;Weird 4-bit init command first time...
 	mov R6,#5
 	call delay_ms ;Wait 5ms
-	mov R0,#$30
+	mov R0,#$03
 	call lcd_write ;Weird repeated 4-bit init command second time...
 	mov R6,#1
 	call delay_ms ;Wait 1ms
-	mov R0,#$30
+	mov R0,#$03
 	call lcd_write ;Weird repeated 4-bit init command third time...
 	mov R0,#$02
 	call lcd_write ;Init 4-bit mode
@@ -308,22 +306,6 @@ rtc_get_time:
     mov @R0,A ;Store years in RAM
     ret
 
-rtc_isr:
-    mov R0,#c_reg
-    movx A,@R0 ;Clear DS12887 UF flag (it is cleared by reading Register C)
-    clr F1 ;Set interrupt flag
-    retr
-
-timer_init:
-    mov A,#timer_init_val
-    mov T,A ;Load initial value to timer
-    ret
-
-timer_isr:
-    dec R5 ;Decrement R5
-    call timer_init ;Reinitialize timer
-    retr
-
     .ot
 month_days  .db 31,28,31,30,31,30,31,31,30,31,30,31
 
@@ -381,7 +363,7 @@ set_days:
     mov R0,#month_days ;Load month_days array address
     add A,R0 ;Add offset
     movp A,@A ;Load number of days from array
-    .ct ;TODO
+    .ct
     inc A ;Add one day for easier comparison later
     mov R0,A ;Store number of days in R0
     mov R1,#days
@@ -605,3 +587,25 @@ delay_ms_loop:
     djnz R7,delay_ms_loop
     djnz R6,delay_ms
     ret
+
+timer_init:
+    mov A,#timer_init_val
+    mov T,A ;Load initial value to timer
+    ret
+
+timer_isr:
+    dec R5 ;Decrement R5
+    sel RB1 ;Switch to second register bank
+    mov R0,A ;Preserve A in R0
+    call timer_init ;Reinitialize timer
+    mov A,R0 ;Restore A
+    retr
+
+rtc_isr:
+    sel RB1 ;Switch to second register bank
+    mov R0,A ;Preserve A in R0
+    mov R1,#c_reg
+    movx A,@R1 ;Clear DS12887 UF flag (it is cleared by reading Register C)
+    clr F1 ;Set interrupt flag
+    mov A,R0 ;Restore A
+    retr
